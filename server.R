@@ -11,6 +11,7 @@ pacman::p_load(
   stringr
 )
 
+# ---- lien pour enregistrer les donnes ----
 fichier_donnees <- "S:/Projekte/ZIG1_PHIRA/2_tool/evenements_data.csv"
 
 serveur <- function(input, output, session) {
