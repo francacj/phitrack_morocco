@@ -6,5 +6,5 @@ This repository is set up with **renv** for reproducible R environments and incl
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/<your-org>/<your-repo>.git
-cd <your-repo>
+git clone https://github.com/francacj/phira_morocco
+cd <phira_morocco>
