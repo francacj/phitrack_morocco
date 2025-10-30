@@ -2,4 +2,5 @@ source("server.R")
 source("ui.R")
 
 
-shiny::runApp("S:/Projekte/ZIG1_PHIRA/2_tool")
+shiny::runApp("4_tool_upload")
+

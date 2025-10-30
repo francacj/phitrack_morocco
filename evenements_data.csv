@@ -1,4 +1,1 @@
-ID_Evenement,Titre,Categorie,Type_Evenement,Sources,Date,Periode_Rapport,Situation,Evaluation_Risque,Mesures,Pertinence_Sante,Pertinence_Voyageurs,Commentaires,Resume,Autre,Derniere_Modification,Statut,Version,Mise_a_jour_de,Links
-EVT_20250627_001,Mpox,NA,NA,NA,2025-06-27,2025-06-20 à 2025-06-27,NA,NA,NA,NA,NA,NA,NA,NA,2025-06-27T17:04:27Z,actif,1,NA,NA
-EVT_20250627_002,covid,NA,Animal,NA,2025-06-27,2025-06-17 à 2025-06-27,100 cas,NA,xxxxx,NA,NA,NA,ghhh,NA,2025-06-27T17:05:50Z,actif,1,NA,NA
-EVT_20250708_001,measles,Alertes internationales,Animal,OMS,2025-07-08,2025-07-01 à 2025-07-08,,,,,,,,,2025-07-08T14:34:51Z,actif,1,NA,
+ID_Evenement,Update,Titre,Categorie,Type_Evenement,Sources,Date,Situation,Evaluation_Risque,Mesures,Pertinence_Sante,Pertinence_Voyageurs,Commentaires,Resume,Autre,Derniere_Modification,Statut,Version

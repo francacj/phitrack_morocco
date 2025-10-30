@@ -24,6 +24,13 @@ ui <- fluidPage(
     display: block;
     white-space: normal;  /* Zeilenumbruch erlaubt */
   }
+    .info-icon{
+    display:inline-block; margin-left:6px; width:18px; height:18px;
+    line-height:18px; text-align:center; border-radius:50%;
+    border:1px solid #17a2b8; color:#17a2b8; font-weight:700;
+    font-family: Arial, sans-serif; cursor:help; font-size:12px;
+  }
+  .info-icon:hover{ background:#e8f7fb; }
     "))
   ),
   titlePanel("Outil de rapport d’événements"),
@@ -39,10 +46,12 @@ ui <- fluidPage(
       selectInput("type_evenement", "Type d'événement", 
                   choices = c("", "Humain", "Animal", "Environnement"),
                   selected = ""),
-      div(class = "large-input", textInput("sources", "Sources", width = "100%")),
-      div(class = "large-input", textInput("links", "Liens", width = "100%")),
-      dateInput("date", "Date"),
-      dateRangeInput("periode", "Période de rapport", start = Sys.Date()-7, end = Sys.Date()),
+      div(class = "large-input", textInput("sources", label = HTML(
+        'Sources <span class="info-icon" title="Saisir les sources au format : Nom (lien). Exemple : WHO (https://www.who.int); ECDC (https://www.ecdc.europa.eu)">i</span>'
+      ), width = "100%")),
+      
+      dateInput("date", "Date du dernier état des données",
+                value = Sys.Date(), format = "yyyy-mm-dd", language = "fr"),
       textAreaInput("situation", "Situation épidémiologique", rows = 10),
       textAreaInput("evaluation_risque", "Évaluation des risques", rows = 10),
       textAreaInput("mesures", "Mesures entreprises", rows = 10),
@@ -73,7 +82,7 @@ ui <- fluidPage(
           br(), br(),
           actionButton("mettre_a_jour", label = "Enregistrer les modifications de l'événement", icon = icon("refresh"), class = "btn btn-primary"),
           br(), br(),
-          actionButton("enregistrer_nouveau", label = "Enregistrer comme Update/mise à jour de l’événement précédent", icon = icon("copy"), class = "btn btn-info")
+          actionButton("enregistrer_nouveau", label = "Enregistrer comme nouvel événement (update de l’événement précédent)", icon = icon("copy"), class = "btn btn-info")
       ),
       div(style = "margin-top: 20px;",
           h4("Exporter les événements"),

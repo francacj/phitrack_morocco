@@ -8,14 +8,22 @@ pacman::p_load(
   dplyr,
   writexl,
   lubridate,
-  stringr
+  stringr,
+  renv
 )
 
-# ---- lien pour enregistrer les donnes ----
-fichier_donnees <- "S:/Projekte/ZIG1_PHIRA/2_tool/evenements_data.csv"
 
-serveur <- function(input, output, session) {
-  useShinyjs()
+# ---- lien pour enregistrer les donnes ----
+fichier_donnees <- "evenements_data.csv"
+
+# Create folders
+dir.create("excel_outputs", showWarnings = FALSE, recursive = TRUE)
+dir.create("rapport_word_outputs", showWarnings = FALSE, recursive = TRUE)
+dir.create("template_rapport", showWarnings = FALSE, recursive = TRUE)
+
+#
+server <- function(input, output, session) {
+ 
   
   # define datasource (csv)
   donnees <- reactiveVal({
@@ -32,7 +40,7 @@ serveur <- function(input, output, session) {
     })
   })
   
-  # filter datasets (by active/termines)
+  # --- Actifs : filtrer + trier du plus récent au plus ancien ---
   donnees_actifs_filtrees <- reactive({
     df <- donnees()
     if (nrow(df) == 0) return(df)
@@ -40,9 +48,10 @@ serveur <- function(input, output, session) {
     if (!is.null(input$filtre_date[1]) && !is.null(input$filtre_date[2])) {
       df <- dplyr::filter(df, Date >= input$filtre_date[1], Date <= input$filtre_date[2])
     }
-    df
+    dplyr::arrange(df, dplyr::desc(Date), dplyr::desc(Derniere_Modification))
   })
   
+  # --- Terminés : filtrer + trier du plus récent au plus ancien ---
   donnees_termines_filtrees <- reactive({
     df <- donnees()
     if (nrow(df) == 0) return(df)
@@ -50,8 +59,9 @@ serveur <- function(input, output, session) {
     if (!is.null(input$filtre_date[1]) && !is.null(input$filtre_date[2])) {
       df <- dplyr::filter(df, Date >= input$filtre_date[1], Date <= input$filtre_date[2])
     }
-    df
+    dplyr::arrange(df, dplyr::desc(Date), dplyr::desc(Derniere_Modification))
   })
+  
   
   
   
@@ -67,13 +77,11 @@ serveur <- function(input, output, session) {
       Update = "Nouvel événement",
       Version = 1,
       Date = input$date,
-      Periode_Rapport = paste(input$periode[1], "à", input$periode[2]),
       Derniere_Modification = force_tz(Sys.time(), "Africa/Casablanca"),
       Titre = input$titre,
       Type_Evenement = input$type_evenement,
       Categorie = input$categorie,
       Sources = input$sources,
-      Liens = input$links,
       Situation = input$situation,
       Evaluation_Risque = input$evaluation_risque,
       Mesures = input$mesures,
@@ -106,7 +114,6 @@ serveur <- function(input, output, session) {
     updateSelectInput(session, "type_evenement", selected = "")
     updateSelectInput(session, "categorie", selected = "")
     updateTextInput(session, "sources", value = "")
-    updateTextInput(session, "links", value = "")
     updateDateInput(session, "date", value = Sys.Date())
     updateDateRangeInput(session, "periode", start = Sys.Date() - 7, end = Sys.Date())
     updateTextAreaInput(session, "situation", value = "")
@@ -125,7 +132,6 @@ serveur <- function(input, output, session) {
     updateSelectInput(session, "type_evenement", selected = "")
     updateSelectInput(session, "categorie", selected = "")
     updateTextInput(session, "sources", value = "")
-    updateTextInput(session, "links", value = "")
     updateDateInput(session, "date", value = Sys.Date())
     updateDateRangeInput(session, "periode", start = Sys.Date() - 7, end = Sys.Date())
     updateTextAreaInput(session, "situation", value = "")
@@ -166,9 +172,7 @@ serveur <- function(input, output, session) {
         Type_Evenement = input$type_evenement,
         Categorie = input$categorie,
         Sources = input$sources,
-        Liens = input$links,
         Date = input$date,
-        Periode_Rapport = paste(input$periode[1], "à", input$periode[2]),
         Situation = input$situation,
         Evaluation_Risque = input$evaluation_risque,
         Mesures = input$mesures,
@@ -225,9 +229,7 @@ serveur <- function(input, output, session) {
         Type_Evenement = input$type_evenement,
         Categorie = input$categorie,
         Sources = input$sources,
-        Liens = input$links,
         Date = input$date,
-        Periode_Rapport = paste(input$periode[1], "à", input$periode[2]),
         Situation = input$situation,
         Evaluation_Risque = input$evaluation_risque,
         Mesures = input$mesures,
@@ -283,17 +285,8 @@ serveur <- function(input, output, session) {
     updateSelectInput(session, "categorie",
                       selected = ifelse(is.na(evenement$Categorie) || evenement$Categorie == "", "", evenement$Categorie))
     updateTextInput(session, "sources", value = evenement$Sources)
-    updateTextInput(session, "links",   value = evenement$Liens)
     updateSelectInput(session, "statut", selected = evenement$Statut)
     updateDateInput(session, "date", value = as.Date(evenement$Date))
-    
-    periode <- tryCatch(strsplit(evenement$Periode_Rapport, " à ")[[1]], error = function(e) character(0))
-    if (length(periode) == 2) {
-      updateDateRangeInput(session, "periode",
-                           start = as.Date(periode[1]),
-                           end   = as.Date(periode[2]))
-    }
-    
     updateTextAreaInput(session, "situation",          value = evenement$Situation)
     updateTextAreaInput(session, "evaluation_risque",  value = evenement$Evaluation_Risque)
     updateTextAreaInput(session, "mesures",            value = evenement$Mesures)
@@ -341,11 +334,16 @@ serveur <- function(input, output, session) {
     })
   })
   
-  #select events / mark blue
+  
+  # ---- actifs ----
   output$tableau_evenements_actifs <- DT::renderDT({
     df <- donnees_actifs_filtrees() %>%
-      dplyr::mutate(across(where(is.character),
-                           ~ sprintf('<div class="cell-fixed" title="%s">%s</div>', ., .)))
+      dplyr::mutate(across(where(is.character), ~{
+        x <- .
+        x[is.na(x)] <- ""
+        sprintf('<div class="cell-fixed" title="%s">%s</div>', x, x)
+      }))
+    
     
     cols <- colnames(df)
     idx  <- function(nm) which(cols == nm) - 1L  # DataTables: 0-basiert
@@ -355,25 +353,30 @@ serveur <- function(input, output, session) {
       selection = "multiple",
       editable  = TRUE,
       escape    = FALSE,
+      rownames  = FALSE,        # <<< important : aligne les index des colonnes
       options   = list(
+        scrollX    = TRUE,      # <<< permet aux largeurs de s'appliquer
         autoWidth  = TRUE,
+        pageLength = 15, 
         columnDefs = list(
-          list(targets = idx("Sources"),           width = "500px"),  
-          list(targets = idx("Liens"),             width = "125px"),  
-          list(targets = idx("Periode_Rapport"),   width = "125px"),  
-          list(targets = idx("Situation"),         width = "500px"),  
-          list(targets = idx("Evaluation_Risque"), width = "500px"),  
-          list(targets = idx("Mesures"),           width = "500px")   
+          list(targets = idx("Sources"),           width = "250px"),
+          list(targets = idx("Situation"),         width = "500px"),
+          list(targets = idx("Evaluation_Risque"), width = "500px"),
+          list(targets = idx("Mesures"),           width = "500px")
         )
       )
     )
   })
   
-  
+  # ---- termines ----
   output$tableau_evenements_termines <- DT::renderDT({
     df <- donnees_termines_filtrees() %>%
-      dplyr::mutate(across(where(is.character),
-                           ~ sprintf('<div class="cell-fixed" title="%s">%s</div>', ., .)))
+      dplyr::mutate(across(where(is.character), ~{
+        x <- .
+        x[is.na(x)] <- ""
+        sprintf('<div class="cell-fixed" title="%s">%s</div>', x, x)
+      }))
+    
     
     cols <- colnames(df)
     idx  <- function(nm) which(cols == nm) - 1L  # DataTables: 0-basiert
@@ -383,15 +386,16 @@ serveur <- function(input, output, session) {
       selection = "multiple",
       editable  = TRUE,
       escape    = FALSE,
+      rownames  = FALSE,        # <<< important : aligne les index des colonnes
       options   = list(
+        scrollX    = TRUE,      # <<< permet aux largeurs de s'appliquer
         autoWidth  = TRUE,
+        pageLength = 15, 
         columnDefs = list(
-          list(targets = idx("Sources"),           width = "500px"),   
-          list(targets = idx("Liens"),             width = "125px"),   
-          list(targets = idx("Periode_Rapport"),   width = "125px"),  
-          list(targets = idx("Situation"),         width = "500px"),  
-          list(targets = idx("Evaluation_Risque"), width = "500px"),  
-          list(targets = idx("Mesures"),           width = "500px")   
+          list(targets = idx("Sources"),           width = "250px"),
+          list(targets = idx("Situation"),         width = "500px"),
+          list(targets = idx("Evaluation_Risque"), width = "500px"),
+          list(targets = idx("Mesures"),           width = "500px")
         )
       )
     )
@@ -450,38 +454,27 @@ serveur <- function(input, output, session) {
   
   dir.create("excel_outputs", showWarnings = FALSE)
   
+  # --- Excel : export ---
   observeEvent(input$exporter_excel, {
-    showModal(modalDialog(
-      title = "Exporter en Excel",
-      "Voulez-vous vraiment exporter les événements sélectionnés ?",
-      footer = tagList(
-        modalButton("Annuler"),
-        actionButton("confirmer_export_excel", "OK")
-      )
-    ))
-  })
-  
-  observeEvent(input$confirmer_export_excel, {
-    removeModal()
+    dir.create("excel_outputs", showWarnings = FALSE)
     
-    selected <- input$tableau_evenements_actifs_rows_selected
-    data_selected <- donnees() %>% filter(Statut == "actif")
+    # Vue actuelle (actifs filtrés + triés) pour aligner sélection & export
+    data_view <- donnees_actifs_filtrees()
+    sel <- input$tableau_evenements_actifs_rows_selected
+    export_data <- if (!is.null(sel) && length(sel) > 0) data_view[sel, ] else data_view
     
-    if (!is.null(selected) && length(selected) > 0) {
-      export_data <- data_selected[selected, ]
-    } else {
-      export_data <- data_selected
+    if (nrow(export_data) == 0) {
+      showModal(modalDialog("Aucun événement sélectionné ou actif."))
+      return()
     }
     
     export_data <- export_data %>%
       mutate(Derniere_Modification = format(Derniere_Modification, "%Y-%m-%d %H:%M:%S"))
     
-    
     date_today <- format(Sys.Date(), "%Y-%m-%d")
     existing_files <- list.files("excel_outputs", pattern = paste0("^evenements_", date_today, "_\\d+\\.xlsx$"))
     existing_nums <- as.integer(gsub(paste0("evenements_", date_today, "_|\\.xlsx"), "", existing_files))
     next_num <- ifelse(length(existing_nums) == 0, 1, max(existing_nums, na.rm = TRUE) + 1)
-    
     filename <- sprintf("excel_outputs/evenements_%s_%d.xlsx", date_today, next_num)
     
     tryCatch({
@@ -501,52 +494,31 @@ serveur <- function(input, output, session) {
   
   # word rapport ------------------------------------------------------------
   
+  # --- Word : export  ---
   observeEvent(input$exporter_word, {
-    showModal(modalDialog(
-      title = "Créer un rapport Word",
-      "Voulez-vous vraiment exporter les événements sélectionnés ?",
-      footer = tagList(
-        modalButton("Annuler"),
-        actionButton("confirmer_export_word", "OK")
-      )
-    ))
-  })
-  
-  observeEvent(input$confirmer_export_word, {
-    removeModal()
     dir.create("rapport_word_outputs", showWarnings = FALSE)
     
-    # === Daten vorbereiten ===
-    selected <- input$tableau_evenements_actifs_rows_selected
-    data_all <- donnees()
-    data_filtered <- data_all %>% dplyr::filter(Statut == "actif")
-    export_data <- if (!is.null(selected) && length(selected) > 0) {
-      data_filtered[selected, ]
-    } else {
-      data_filtered
-    }
+    # Vue actuelle (actifs filtrés + triés)
+    data_view <- donnees_actifs_filtrees()
+    sel <- input$tableau_evenements_actifs_rows_selected
+    export_data <- if (!is.null(sel) && length(sel) > 0) data_view[sel, ] else data_view
     
     if (nrow(export_data) == 0) {
       showModal(modalDialog("Aucun événement sélectionné ou actif."))
       return()
     }
     
-    # === Dateiname generieren ===
+    # Nom de fichier
     rapport_filename <- generer_nom_fichier()
     
-    # === Dokument mit Template öffnen ===
+    # Génération du document
     doc <- officer::read_docx("template_rapport/template_word.docx")
-    
-    # === Seite 1: Bookmarks füllen ===
-    doc <- ajouter_en_tete(doc)              # -> BM_SEMAINE
-    doc <- ajouter_sources(doc, export_data) # -> BM_SOURCES
-    
-    # === Ab Seite 2 weiter ===
-    doc <- officer::body_add_break(doc)      # Seitenumbruch (auf Seite 2)
+    doc <- ajouter_en_tete(doc)
+    doc <- ajouter_sources(doc, export_data)
+    doc <- officer::body_add_break(doc)
     doc <- ajouter_sommaire(doc, export_data, NULL)
     doc <- ajouter_evenements(doc, export_data, NULL)
     
-    # === Dokument speichern ===
     tryCatch({
       print(doc, target = rapport_filename)
       showModal(modalDialog(
@@ -560,6 +532,7 @@ serveur <- function(input, output, session) {
     })
   })
   
+  # nombre fichier
   generer_nom_fichier <- function() {
     date_today <- format(Sys.Date(), "%Y-%m-%d")
     existing_files <- list.files("rapport_word_outputs", pattern = paste0("^rapport_", date_today, "_\\d+\\.docx$"))
@@ -617,43 +590,84 @@ serveur <- function(input, output, session) {
   
   # ----- BM_SOURCES -----
   ajouter_sources <- function(doc, data) {
-    # Helfer zum Parsen & Säubern
+    
+    # --- Helpers ---
+    # Parse la colonne "Sources" où l'utilisateur saisit : "Nom (lien); AutreNom (lien2)"
     parse_sources <- function(df) {
-      src <- unique(na.omit(unlist(strsplit(paste(df$Sources, collapse = "\n"), ";|,|\\n"))))
-      src <- trimws(src)
-      src[src != ""]
-    }
-    bullets_or_dash <- function(vec) {
-      if (length(vec) > 0) paste0("• ", paste(vec, collapse = "\n• ")) else "—"
+      # retirer d'abord les NA / vides
+      raw <- df$Sources
+      raw <- raw[!is.na(raw) & trimws(raw) != ""]
+      if (length(raw) == 0) return(character(0))
+      
+      # séparer par ; , ou retour ligne
+      brut <- unlist(strsplit(paste(raw, collapse = "\n"), ";|,|\\n"))
+      brut <- trimws(brut)
+      brut <- brut[brut != ""]
+      if (length(brut) == 0) return(character(0))
+      
+      # garder uniquement le nom avant la parenthèse finale : "ECDC (www...)" -> "ECDC"
+      noms <- sub("\\s*\\(.*?\\)\\s*$", "", brut)
+      noms <- trimws(noms)
+      unique(noms[noms != ""])
     }
     
-    # Gruppen nach Kategorie
-    df_nat   <- dplyr::filter(data, Categorie == "Alertes nationales")
-    df_intl  <- dplyr::filter(data, Categorie == "Alertes internationales")
-    df_both  <- dplyr::filter(data, Categorie == "Alertes internationales et nationales")
+    join_sources <- function(vec) {
+      if (length(vec) == 0) "" else paste(vec, collapse = "; ")
+    }
+    
+    
+    # Groupes par catégorie
+    df_nat  <- dplyr::filter(data, Categorie == "Alertes nationales")
+    df_intl <- dplyr::filter(data, Categorie == "Alertes internationales")
+    df_both <- dplyr::filter(data, Categorie == "Alertes internationales et nationales")
     
     src_nat  <- parse_sources(df_nat)
     src_intl <- parse_sources(df_intl)
     src_both <- parse_sources(df_both)
     
-    # Text mit Überschrift + Unterüberschriften
-    valeur <- paste(
-      "Sources de données de cette semaine",
-      paste0("au niveau national\n", bullets_or_dash(src_nat)),
-      paste0("au niveau international\n", bullets_or_dash(src_intl)),
-      paste0("au niveau national et international\n", bullets_or_dash(src_both)),
-      sep = "\n\n"
+    # Styles (tout en blanc, italique, Century, taille 9)
+    base_style <- officer::fp_text(
+      color = "white", italic = TRUE, font.size = 9, font.family = "Century"
+    )
+    bold_style <- officer::fp_text(
+      color = "white", italic = TRUE, font.size = 9, font.family = "Century", bold = TRUE
+    )
+    head_style <- officer::fp_text(
+      color = "white", italic = TRUE, font.size = 9, font.family = "Century", underlined = TRUE
     )
     
-    doc <- officer::body_replace_text_at_bkm(doc, bookmark = "BM_SOURCES", value = valeur)
+    # Lignes formatées
+    head_par <- officer::fpar(officer::ftext("Sources de données de cette semaine : ", head_style))
+    
+    nat_par  <- officer::fpar(
+      officer::ftext("• Au niveau national : ", bold_style),
+      officer::ftext(join_sources(src_nat), base_style)
+    )
+    intl_par <- officer::fpar(
+      officer::ftext("• Au niveau international : ", bold_style),
+      officer::ftext(join_sources(src_intl), base_style)
+    )
+    both_par <- officer::fpar(
+      officer::ftext("• Au niveau national et international : ", bold_style),
+      officer::ftext(join_sources(src_both), base_style)
+    )
+    
+    # Aller au signet et remplacer par du contenu riche (compatibilité officer)
+    doc <- officer::cursor_bookmark(doc, "BM_SOURCES")
+    doc <- officer::body_add_fpar(doc, value = head_par,  pos = "on")
+    doc <- officer::body_add_fpar(doc, value = nat_par,   pos = "after")
+    doc <- officer::body_add_fpar(doc, value = intl_par,  pos = "after")
+    doc <- officer::body_add_fpar(doc, value = both_par,  pos = "after")
+    
     doc
   }
+  
+  
   
   
  # ============== page 2 =================
   
   # --------Sommaire des evenements ----------
-  
   ajouter_sommaire <- function(doc, data, styles) {
     cat_map <- list(
       "Alertes internationales et nationales" = "Alertes et Urgences de Santé Publique au niveau international et national",
@@ -662,92 +676,91 @@ serveur <- function(input, output, session) {
     )
     categories <- names(cat_map)
     
-    doc <- doc %>%
-      officer::body_add_par("SOMMAIRE DES ÉVÉNEMENTS", style = "m_heading_1")
+    doc <- doc %>% officer::body_add_par("SOMMAIRE DES ÉVÉNEMENTS", style = "m_heading_1")
     
     compteur <- 1
     for (cat in categories) {
       cat_data <- data %>% dplyr::filter(Categorie == cat)
       if (nrow(cat_data) > 0) {
-        doc <- doc %>%
-          officer::body_add_par(cat_map[[cat]], style = "m_heading_2")
+        # Titre de catégorie (uniquement ici dans le sommaire)
+        doc <- doc %>% officer::body_add_par(cat_map[[cat]], style = "m_heading_2")
         
         for (i in 1:nrow(cat_data)) {
-          doc <- doc %>%
-            officer::body_add_par(paste0(compteur, ". ", cat_data$Titre[i]), style = "m_heading_3")
+          # Titres d’événements en m_heading_4
+          doc <- doc %>% officer::body_add_par(
+            paste0(compteur, ". ", cat_data$Titre[i]), style = "m_heading_4"
+          )
           compteur <- compteur + 1
         }
         
-        doc <- doc %>% officer::body_add_par("", style = "m_heading_2")
+        # <- keine zusätzliche Leerzeile mehr (verhindert den „Balken“)
       }
     }
     
     doc
   }
+  
   
   
   # word: ajouter evenements ------------------------------------------------------
   ajouter_evenements <- function(doc, data, styles) {
+    # --- Catégories et titres de section (inchangés) ---
     cat_map <- list(
       "Alertes internationales et nationales" = "Alertes et Urgences de Santé Publique au niveau international et national",
-      "Alertes nationales" = "Alertes et Urgences de Santé Publique au niveau national",
-      "Alertes internationales" = "Alertes et Urgences de Santé Publique au niveau international"
+      "Alertes nationales"                    = "Alertes et Urgences de Santé Publique au niveau national",
+      "Alertes internationales"               = "Alertes et Urgences de Santé Publique au niveau international"
     )
     categories <- names(cat_map)
-    compteur <- 1
+    compteur   <- 1
+    
+    # --- Mise en forme simple ---
+    p_std   <- officer::fp_par(line_spacing = 0.7)
+    run_std <- officer::fp_text()
+    run_b   <- officer::fp_text(bold = TRUE)
+    
+    # --- Champs à inclure pour chaque événement ---
+    champs  <- c("Situation", "Evaluation_Risque", "Mesures")
+    labels  <- c("Situation épidémiologique", "Évaluation des risques", "Mesures entreprises")
     
     for (cat in categories) {
-      cat_data <- data %>% filter(Categorie == cat)
-      if (nrow(cat_data) > 0) {
+      cat_data <- data %>% dplyr::filter(Categorie == cat)
+      if (nrow(cat_data) == 0) next
+      
+      for (i in seq_len(nrow(cat_data))) {
+        row <- cat_data[i, ]
         
-        # Kategorieüberschrift
+        # 1) Titre de l'événement (niveau 1)
         doc <- doc %>%
-          body_add_par(cat_map[[cat]], style = "m_heading_2") %>%
-          body_add_par("", style = "m_standard")
+          officer::body_add_par(paste0(compteur, ". ", row$Titre), style = "m_heading_1")
         
-        for (i in 1:nrow(cat_data)) {
-          row <- cat_data[i, ]
-          
-          # Titelzeile des Events
-          doc <- doc %>%
-            body_add_par(paste0(compteur, ". ", row$Titre), style = "m_heading_1") %>%
-            body_add_par("", style = "m_standard")
-          
-          # Résumé (wenn vorhanden)
-          if (!is.na(row$Resume) && nzchar(trimws(row$Resume))) {
-            doc <- doc %>%
-              body_add_par("Résumé", style = "m_resume") %>%
-              body_add_par(row$Resume, style = "m_resume") %>%
-              body_add_par("", style = "m_resume")
+        # 2) Détails limités aux 3 champs demandés (dans l'ordre)
+        for (j in seq_along(champs)) {
+          val <- row[[champs[j]]]
+          if (!is.null(val) && !is.na(val) && nzchar(trimws(as.character(val)))) {
+            bloc <- officer::fpar(
+              officer::ftext(paste0(labels[j], " : "), run_b),
+              officer::ftext(as.character(val), run_std),
+              fp_p = p_std
+            )
+            doc <- officer::body_add_fpar(doc, value = bloc, style = "m_standard")
           }
-          
-          
-          # Alle anderen Felder
-          champs <- c("Date", "Periode_Rapport", "Type_Evenement", "Categorie", "Sources", "Liens",
-                      "Situation", "Evaluation_Risque", "Mesures", "Pertinence_Sante",
-                      "Pertinence_Voyageurs", "Commentaires", "Autre")
-          labels <- c("Date", "Période du rapport", "Type d’événement", "Catégorie d’alerte", "Sources", "Liens",
-                      "Situation épidémiologique", "Évaluation des risques", "Mesures entreprises",
-                      "Pertinence (santé)", "Pertinence (voyageurs)", "Commentaires", "Autre info")
-          
-          for (j in seq_along(champs)) {
-            val <- row[[champs[j]]]
-            if (!is.null(val) && !is.na(val) && nzchar(trimws(as.character(val)))) {
-              doc <- doc %>%
-                body_add_par(paste0(labels[j], " : ", val), style = "m_heading_3")
-            }
-          }
-          
-          doc <- doc %>%
-            body_add_par("\n---------------------------\n", style = "m_heading_3")
-          
-          compteur <- compteur + 1
         }
+        
+        # 3) Résumé : toujours placé à la fin de l'événement (si renseigné)
+        if (!is.null(row$Resume) && !is.na(row$Resume) && nzchar(trimws(as.character(row$Resume)))) {
+          doc <- officer::body_add_par(doc, "Résumé", style = "m_resume")
+          doc <- officer::body_add_par(doc, as.character(row$Resume), style = "m_resume")
+        }
+        
+        compteur <- compteur + 1
       }
     }
     
     doc
   }
+  
+  
+  
 }
 
 
