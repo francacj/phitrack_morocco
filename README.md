@@ -5,6 +5,16 @@ This repository is set up with **renv** for reproducible R environments and incl
 ## Quick start
 
 ### 1. Clone the repository
-```bash
 git clone https://github.com/francacj/phira_morocco
-cd <phira_morocco>
+ >> download ZIP folder >> unzip
+ 
+### 2. Install packages:
+Go to folder "phira_morocco" , double click on tool-morocco.Rproj
+>> Load + run: install_packages.R
+
+
+### 3. Run app:
+Load: server.r , ui.r, shiny_run.r. 
+Open "shiny_run.r". Run rows one by one.
+
+
